@@ -1,0 +1,59 @@
+name: VM4 Sibling GitHub Token Authz Discriminator
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sibling-authz:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compare GitHub and Mergify target authorization
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          target='vm4-tenant-anchor-a91c37-renamed/tenant-anchor-private'
+          api="https://api.mergify.com/v1/repos/${target}/merge-queue/pause"
+
+          gh_code=$(curl -sS -o /tmp/vm4-gh-target.json -w '%{http_code}' \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/${target}")
+          echo "VM4_GITHUB_TARGET_CODE=${gh_code}"
+
+          mget_code=$(curl -sS -o /tmp/vm4-mget.json -w '%{http_code}' \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/json' \
+            "${api}")
+          echo "VM4_MERGIFY_GET_CODE=${mget_code}"
+          printf 'VM4_MERGIFY_GET_BODY='; cat /tmp/vm4-mget.json; echo
+
+          mput_code=$(curl -sS -o /tmp/vm4-mput.json -w '%{http_code}' \
+            -X PUT \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/json' \
+            -H 'Content-Type: application/json' \
+            --data '{"reason":"VM4 source-repo Actions token sibling authz discriminator"}' \
+            "${api}")
+          echo "VM4_MERGIFY_PUT_CODE=${mput_code}"
+          printf 'VM4_MERGIFY_PUT_BODY='; cat /tmp/vm4-mput.json; echo
+
+          if [ "${mput_code}" = '200' ]; then
+            verify_code=$(curl -sS -o /tmp/vm4-verify.json -w '%{http_code}' \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H 'Accept: application/json' \
+              "${api}")
+            echo "VM4_MERGIFY_VERIFY_CODE=${verify_code}"
+            printf 'VM4_MERGIFY_VERIFY_BODY='; cat /tmp/vm4-verify.json; echo
+
+            delete_code=$(curl -sS -o /tmp/vm4-delete.json -w '%{http_code}' \
+              -X DELETE \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H 'Accept: application/json' \
+              "${api}")
+            echo "VM4_MERGIFY_DELETE_CODE=${delete_code}"
+            printf 'VM4_MERGIFY_DELETE_BODY='; cat /tmp/vm4-delete.json; echo
+          fi
